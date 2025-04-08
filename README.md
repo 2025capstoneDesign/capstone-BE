@@ -47,3 +47,5 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 python run.py
 ```
+
+<localhost:8000/docs> 를 통해 API 명세서 확인 가능합니다.
