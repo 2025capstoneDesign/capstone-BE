@@ -1,0 +1,135 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
+
+from torch.utils.data import DataLoader
+
+import torchvision
+import torchvision.transforms as transforms
+
+
+
+
+
+# Define the Transforms for Training Dataset
+transforms_train = transforms.Compose([
+  transforms.RandomCrop(32, padding=4),
+  transforms.RandomHorizontalFlip(),
+  transforms.ToTensor(),
+  transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+# Define the Transforms for Testing Dataset
+transforms_test = transforms.Compose([
+  transforms.ToTensor(),
+  transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+# CIFAR-10 Dataset
+cifar_train = torchvision.datasets.CIFAR10(root='./', train=True, download=True, transform=transforms_train)
+cifar_test = torchvision.datasets.CIFAR10(root='./', train=False, download=True, transform=transforms_test)
+
+# Data Loader for CIFAR-10
+# cifar_train_loader = DataLoader(cifar_train, batch_size=128, shuffle=True)
+# cifar_test_loader = DataLoader(cifar_test, batch_size=128, shuffle=False)
+cifar_train_loader = DataLoader(cifar_train, batch_size=128, shuffle=True, num_workers=2)
+cifar_test_loader = DataLoader(cifar_test, batch_size=128, shuffle=False, num_workers=2)
+
+
+
+# Change the following CNNs architecture
+
+class myConvNet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+
+
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(device)
+
+model = myConvNet()
+model = model.to(device)
+
+
+
+
+# Optimizer: Stochastic Gradient Descent Method
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+
+# Learning Rate Scheduler
+# Reduce learning rate by a factor of 0.1 every 1 epoch starting from epoch 7
+scheduler = lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1, last_epoch=6)  # Starts at epoch 7
+
+# Define Loss function
+loss_fn = nn.CrossEntropyLoss()
+
+
+
+
+# Train the model
+total_step = len(cifar_train_loader)
+epochs = 10
+for epoch in range(epochs):
+    for i, (images, labels) in enumerate(cifar_train_loader):  # mini batch for loop
+
+        # Upload to gpu
+        images = images.to(device)
+        labels = labels.to(device)
+
+        # Forward pass
+        outputs = model(images)
+        loss = loss_fn(outputs, labels)
+
+        # Backward pass & Optimize
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if (i+1) % 100 == 0:
+            print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
+                   .format(epoch+1, epochs, i+1, total_step, loss.item()))
+
+    # Adjust learning rate at the end of each epoch
+    scheduler.step()
+    print(f"Epoch {epoch+1} Learning Rate: {scheduler.get_last_lr()[0]}")
+
+
+
+
+
+# Test the model
+model.eval()
+with torch.no_grad():
+    correct = 0
+    total = 0
+    for images, labels in cifar_test_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
+        outputs = model(images)
+
+        _, predicted = torch.max(outputs.data, 1)  # classificatoin model -> get the label prediction of top 1
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+    print('Accuracy of Your CNNs on CIFAR-10 test set: {} %'.format(100 * correct / total))

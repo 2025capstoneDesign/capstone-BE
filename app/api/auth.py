@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 
-from app.schema.user import UserLoginResponse, UserRegisterRequest, UserRegisterResponse
+from app.schema.user_schema import UserLoginResponse, UserRegisterRequest, UserRegisterResponse
 from app.service.user_service import authenticate_user, create_user, get_user_by_email
 from app.config.security import create_access_token
 from app.config.settings import settings
