@@ -34,10 +34,10 @@ def transcribe_audio(file: UploadFile = File(...)):
     return {"transcription": "이곳에 추출된 텍스트가 들어갑니다"}
 
 
-@router.post("/upload-lecture")
+@router.post("/upload-lecture-file")
 def upload_lecture(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    강의 녹음본 및 강의안 업로드 (단순 저장 또는 후처리용)
+    강의 녹음본 및 강의안 업로드 
     """
     # TODO: 파일 저장 및 데이터베이스 등록
     return lecture_service.upload_lecture_file(file, db)

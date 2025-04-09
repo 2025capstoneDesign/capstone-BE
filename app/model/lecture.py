@@ -8,4 +8,5 @@ class Lecture(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String(255), nullable=False)
     filetype = Column(String(50), nullable=False)
+    file_url = Column(String(512), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
