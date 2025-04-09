@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 
-from app.schema.user import Token, UserCreate
+from app.schema.user import UserLoginResponse, UserRegisterRequest, UserRegisterResponse
 from app.service.user_service import authenticate_user, create_user, get_user_by_email
 from app.config.security import create_access_token
 from app.config.settings import settings
@@ -19,7 +19,7 @@ def get_db():
         db.close()
 
 # 로그인 API
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=UserLoginResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # DB에 있는 내용과 비교해 인증 시도 
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -37,8 +37,8 @@ def logout():
     return {"message": "Logged out. Discard your token on client side."}
 
 # 회원가입 API
-@router.post("/register", response_model=Token)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
+@router.post("/register", response_model=UserRegisterResponse)
+def register(user_data: UserRegisterRequest, db: Session = Depends(get_db)):
     # 회원 중복 확인
     existing = get_user_by_email(db, user_data.email)
     if existing:
