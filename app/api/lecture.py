@@ -41,3 +41,34 @@ def upload_lecture(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     # TODO: 파일 저장 및 데이터베이스 등록
     return lecture_service.upload_lecture_file(file, db)
+
+
+@router.post("/extract-text-from-doc")
+def extract_text_from_lecture_doc(file: UploadFile = File(...)):
+    """
+    강의안(PPTX, PDF) 파일에서 텍스트 추출
+    """
+    # TODO: 확장자 확인
+    # TODO: PPTX → python-pptx로 텍스트 추출
+    # TODO: PDF → pdfplumber로 텍스트 추출
+
+    extension = file.filename.split('.')[-1].lower()
+    if extension not in ["pdf", "pptx"]:
+        return {"error": "지원하지 않는 파일 형식입니다. PDF 또는 PPTX만 허용됩니다."}
+
+    # TODO: 실제 텍스트 추출 로직 구현 예정
+    return {"message": f"{extension.upper()} 파일에서 텍스트 추출 완료", "text": "여기에 추출된 텍스트가 들어갑니다"}
+
+
+@router.post("/lecture-slide-mapping")
+def extract_text_from_lecture_doc(file: UploadFile = File(...)):
+    """
+    강의 녹음본에서 추출한 텍스트를 강의 슬라이드에 맞게 매칭
+    """
+    
+    extension = file.filename.split('.')[-1].lower()
+    if extension not in ["pdf", "pptx"]:
+        return {"error": "지원하지 않는 파일 형식입니다. PDF 또는 PPTX만 허용됩니다."}
+
+    # TODO: 실제 텍스트 슬라이드 맵핑 로직 구현 예정
+    return {"message": "강의 녹음본 강의 슬라이드 맵핑 완료"}
