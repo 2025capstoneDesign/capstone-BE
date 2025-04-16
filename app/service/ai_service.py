@@ -31,20 +31,31 @@ def download_youtube_audio(url: str) -> str:
     return output_path
 
 def transcribe_audio_file(audio_file: UploadFile) -> str:
-    # 업로드된 파일을 서버의 DOWNLOAD_DIR에 저장
+    # 업로드된 파일(강의 녹음본)을 서버의 DOWNLOAD_DIR에 저장
     file_path = os.path.join(DOWNLOAD_DIR, audio_file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(audio_file.file, buffer)
+
     # Whisper 모델 로드 및 음성 인식 수행 (small 모델 사용)
+    print("텍스트 변환 진행중")
     model = whisper.load_model("small")
     result = model.transcribe(file_path)
-    text = result.get("text")
-    return text
+    transcribed_text = result.get("text")
+    print("텍스트 변환 완료")
+
+    # 강의 녹음본에서 추출한 텍스트 DOWNLOAD_DIR에 저장
+    lecture_text_path = os.path.join(DOWNLOAD_DIR, "lecture_text.txt")
+    with open(lecture_text_path, "w", encoding="utf-8") as f:
+        f.write(transcribed_text)
+    print("강의 녹음본에서 추출한 텍스트 " + lecture_text_path + "에 저장 완료")
+
+    return transcribed_text
 
 def extract_ppt_text(ppt_file: UploadFile) -> dict:
     if not ppt_file.filename.lower().endswith(".pptx"):
         raise ValueError("올바른 PPTX 파일을 업로드하세요.")
 
+    # 업로드된 파일(강의안)을 서버의 DOWNLOAD_DIR에 저장
     file_path = os.path.join(DOWNLOAD_DIR, ppt_file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(ppt_file.file, buffer)
