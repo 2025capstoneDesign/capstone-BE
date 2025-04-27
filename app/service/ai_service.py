@@ -1,9 +1,15 @@
 from fastapi import UploadFile
 from pptx import Presentation     # python-pptx: PPT 파일 파싱 라이브러리
+from openai import OpenAI
+from dotenv import load_dotenv
 
 import os, uuid, shutil
 import yt_dlp                     # YouTube 동영상/오디오 다운로드 라이브러리
 import whisper                    # OpenAI Whisper 음성 인식 라이브러리
+import platform
+
+import asyncio
+from functools import partial
 
 # 다운로드 및 업로드 파일 저장 폴더
 DOWNLOAD_DIR = "download"
@@ -78,3 +84,61 @@ def extract_ppt_text(ppt_file: UploadFile) -> dict:
     return {
         f"슬라이드 {i+1}": text for i, text in enumerate(slides_text)
     }
+
+
+# 슬라이드 이미지 분석 
+load_dotenv()
+
+def get_libreoffice_path():
+    system = platform.system()
+    if system == "Windows":
+        return r"C:\Program Files\LibreOffice\program\soffice.exe"
+    elif system == "Darwin":
+        return "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+    else:
+        return "soffice"
+
+client = OpenAI(
+    api_key=os.getenv('OPENAI_API_KEY'),
+    base_url="https://api.openai.com/v1"
+)
+
+def _analyze_image_sync(image_url):
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": """Explain slide content following these guidelines:
+1. Present as a professor would during class.
+2. Focus on key points, avoid unnecessary details not too long.
+3. Use narrative prose.
+4. Be concise yet informative."""
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url,
+                            "detail": "low"
+                        }
+                    }
+                ]
+            }
+        ],
+        max_tokens=1000
+    )
+    return response.choices[0].message.content
+
+async def analyze_image(image_url):
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,  # 디폴트 쓰레드풀
+            partial(_analyze_image_sync, image_url)
+        )
+        return result
+    except Exception as e:
+        return f"오류 발생: {str(e)}"
