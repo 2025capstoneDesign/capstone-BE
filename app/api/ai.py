@@ -4,6 +4,9 @@ from fastapi.responses import JSONResponse
 from app.schema.ai_schema import PptExtractResponse, YouTubeURLRequest, AudioTranscibeResponse
 from app.service.ai_service import download_youtube_audio, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
 
+from app.service.mapping_service import LectureSlideMapper
+from app.schema.mapping_schema import LectureTextRequest, MappingResultResponse
+
 router = APIRouter()
 
 @router.post("/youtube-audio")
@@ -42,3 +45,17 @@ def extract_ppt_text_endpoint(ppt_file: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"message": str(e), "data": None})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"PPT 처리 실패: {e}", "data": None})
+
+
+mapper = LectureSlideMapper()
+
+@router.post("/text-slide-mapping", response_model=MappingResultResponse)
+def map_lecture_to_slide(request: LectureTextRequest):
+    """
+    강의 텍스트 + 슬라이드 텍스트를 받아 매핑합니다.
+    """
+    results = mapper.map_lecture_text_to_slides(
+        lecture_text=request.lecture_text,
+        slide_texts=request.slide_texts
+    )
+    return MappingResultResponse(results=results)
