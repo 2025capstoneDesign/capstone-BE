@@ -60,16 +60,41 @@ def extract_ppt_text_endpoint(ppt_file: UploadFile = File(...)):
 
 
 mapper = LectureSlideMapper()
-@router.post("/text-slide-mapping", response_model=MappingResultResponse)
+@router.post("/text-slide-mapping")
 def map_lecture_to_slide(request: LectureTextRequest):
     """
-    강의 텍스트 + 슬라이드 텍스트를 받아 매핑
+    강의 텍스트 + 슬라이드 텍스트를 받아 매핑 후 슬라이드별 세그먼트 리스트로 그룹화
+    (segment_index, text, similarity_score 모두 포함)
     """
     results = mapper.map_lecture_text_to_slides(
         lecture_text=request.lecture_text,
         slide_texts=request.slide_texts
     )
-    return MappingResultResponse(results=results)
+
+    # 1. 세그먼트 텍스트 분리
+    segments = mapper.preprocess_and_split_text(request.lecture_text)  
+
+    # 2. 슬라이드별 세그먼트 리스트로 묶기
+    slide_to_segments = {}
+
+    for res in results:
+        segment_idx = res["segment_index"]     
+        slide_idx = res["matched_slide_index"]  
+        similarity_score = res["similarity_score"] 
+        slide_key = f"slide{slide_idx}"
+
+        if slide_key not in slide_to_segments:
+            slide_to_segments[slide_key] = []
+
+        # 세그먼트 추가
+        slide_to_segments[slide_key].append({
+            "segment_index": segment_idx,
+            "text": segments[segment_idx],
+            "similarity_score": round(similarity_score, 4)  # 소수점 4자리로 깔끔하게
+        })
+
+    # 3. 최종 결과 반환
+    return JSONResponse(content=slide_to_segments)
 
 
 LIBREOFFICE_PATH = get_libreoffice_path()
