@@ -17,11 +17,14 @@ import os
 import shutil
 import base64
 import io
+import logging
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 router = APIRouter()
 
-@router.post("/youtube-audio")
+@router.post("/extract-youtube-audio")
 async def youtube_audio(request: YouTubeURLRequest):
     """
     YouTube 영상으로부터 오디오를 추출 
@@ -68,13 +71,16 @@ def map_lecture_to_slide(request: LectureTextRequest):
     강의 텍스트 + 슬라이드 텍스트를 받아 매핑 후 슬라이드별 세그먼트 리스트로 그룹화
     (segment_index, text, similarity_score 모두 포함)
     """
+
+    # 강의 텍스트를 세그먼트로 분리 (하나의 세그먼트에 10문장 고정)
+    segments = mapper.preprocess_and_split_text(request.lecture_text)
+
     results = mapper.map_lecture_text_to_slides(
-        lecture_text=request.lecture_text,
+        segment_texts=segments, 
         slide_texts=request.slide_texts
     )
 
-    # 1. 세그먼트 텍스트 분리
-    segments = mapper.preprocess_and_split_text(request.lecture_text)  
+    print("강의 녹음본에서 추출한 텍스트 세그먼트 분리 완료")
 
     # 2. 슬라이드별 세그먼트 리스트로 묶기
     slide_to_segments = {}
@@ -94,6 +100,8 @@ def map_lecture_to_slide(request: LectureTextRequest):
             "text": segments[segment_idx],
             "similarity_score": round(similarity_score, 4)  # 소수점 4자리로 깔끔하게
         })
+
+    print("슬라이드별 세그먼트 매칭 완료")
 
     # 3. 최종 결과 반환
     return JSONResponse(content=slide_to_segments)
@@ -115,6 +123,8 @@ async def image_captioning(file: UploadFile = File(...)):
         with open(ppt_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
+        print("PPT 파일 저장 완료료")
+
         # 3. PPT 파일 열어서 슬라이드 수 확인
         prs = Presentation(ppt_path)
         total_slides = len(prs.slides)
@@ -125,10 +135,11 @@ async def image_captioning(file: UploadFile = File(...)):
         # 변환된 PDF 파일 경로
         ppt_filename = os.path.splitext(file.filename)[0] + ".pdf"
         pdf_path = os.path.join(temp_dir, ppt_filename)
-
         if not os.path.exists(pdf_path):
             raise Exception("PDF 변환 실패")
-
+        
+        print("PDF 변환 완료")
+        
         # 5. PDF -> 이미지 변환
         images = convert_from_path(
             pdf_path,
@@ -137,6 +148,8 @@ async def image_captioning(file: UploadFile = File(...)):
         if not images:
             print(f"슬라이드를 이미지로 변환하는데 실패했습니다.")
             return None
+        
+        print("PDF - 이미지 변환 완료")
 
         # 6. 모든 슬라이드 이미지 캡셔닝
         results = {
@@ -155,6 +168,9 @@ async def image_captioning(file: UploadFile = File(...)):
 
             # 슬라이드 결과 저장
             results[f"slide{idx}"] = caption
+        
+        print("이미지 캡셔닝 완료")
+
 
         # 7. 임시 파일 정리
         shutil.rmtree(temp_dir)
@@ -162,6 +178,7 @@ async def image_captioning(file: UploadFile = File(...)):
         return JSONResponse(content=results)
 
     except Exception as e:
+        logger.debug(e, stack_info=True)
         # 임시파일 삭제
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
@@ -189,6 +206,8 @@ async def process_lecture(
                 lecture_text = f.read()
         else:
             lecture_text = transcribe_audio_file(audio_file)
+        
+        print("오디오 텍스트 변환 완료")
 
         # 2. PPT 파일 저장 및 변환
         temp_dir = tempfile.mkdtemp()
@@ -219,15 +238,22 @@ async def process_lecture(
 
             caption = await analyze_image(image_url)
             slide_captions.append(caption)
+        
+        print("이미지 캡셔닝 완료")
 
         # 4. CLOVA Segmentation 사용해서 세그먼트 나누기
         segments = clova_segmentation(lecture_text)
+
+        print("Clova API 활용 세그먼트 분리 완료")
+
 
         # 5. 세그먼트-슬라이드 매핑
         results = mapper.map_lecture_text_to_slides(
             segment_texts=segments,
             slide_texts=slide_captions
         )
+
+        print("세그먼트 슬라이드 매핑 완료")
 
         # 6. 매핑 결과를 슬라이드별로 묶기
         slide_to_segments = {}

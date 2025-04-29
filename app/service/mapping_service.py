@@ -1,9 +1,21 @@
 import torch
 from sentence_transformers import SentenceTransformer, util
+from nltk.tokenize import sent_tokenize
 
 class LectureSlideMapper:
     def __init__(self):
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    def preprocess_and_split_text(self, text, max_sentences=10):
+        """
+        세그먼트 분리 (고정된 개수의 문장으로로)
+        """
+        sentences = sent_tokenize(text.strip())
+        merged_sentences = []
+        for i in range(0, len(sentences), max_sentences):
+            segment = ' '.join(sentences[i:i + max_sentences])
+            merged_sentences.append(segment)
+        return merged_sentences
 
     def map_lecture_text_to_slides(self, segment_texts: list, slide_texts: list):
         """

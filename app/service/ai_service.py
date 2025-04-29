@@ -19,7 +19,7 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 def download_youtube_audio(url: str) -> str:
     # 저장 오디오 파일명 
     # audio_file_name = f"{uuid.uuid4().hex}.m4a"
-    audio_file_name = "audio.wav"
+    audio_file_name = f"{url}_audio.wav"
     output_path = os.path.join(DOWNLOAD_DIR, audio_file_name)
     # yt_dlp 옵션 설정: 최고 품질의 오디오만 다운로드 (m4a 형식으로 추출)
     ydl_opts = {
