@@ -3,7 +3,7 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.schema.ai_schema import PptExtractResponse, YouTubeURLRequest, AudioTranscibeResponse
-from app.service.ai_service import clova_segmentation, download_youtube_audio, get_libreoffice_path, analyze_image, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
+from app.service.ai_service import download_youtube_audio, get_libreoffice_path, analyze_image, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
 
 from app.service.mapping_service import LectureSlideMapper
 from app.schema.mapping_schema import LectureTextRequest, MappingResultResponse
@@ -188,23 +188,24 @@ async def image_captioning(file: UploadFile = File(...)):
 
 mapper = LectureSlideMapper()
 LIBREOFFICE_PATH = get_libreoffice_path()
-# ✨ /process-lecture API
 @router.post("/process-lecture")
 async def process_lecture(
     audio_file: UploadFile = File(...),
     ppt_file: UploadFile = File(...),
-    skip_transcription: bool = Form(False)
+    skip_transcription: bool = Form(False)  # 🔥 옵션 추가: 기본은 False
 ):
     """
-    강의 녹음본 + PPT 파일 입력받아서 슬라이드별 세그먼트 매칭 결과 리턴
+    강의 녹음본 + PPT 파일 입력받아서 슬라이드별 세그먼트 매칭 결과 
     """
 
     try:
-        # 1. 오디오 파일 텍스트 변환 or 스킵
+        ### 1. 오디오 파일 텍스트 변환 (또는 스킵)
         if skip_transcription:
+            # 🔥 변환 스킵: 이미 저장된 텍스트 파일 읽기
             with open(os.path.join("download", "lecture_text.txt"), "r", encoding="utf-8") as f:
                 lecture_text = f.read()
         else:
+            # 🔥 변환 수행
             lecture_text = transcribe_audio_file(audio_file)
         
         print("오디오 텍스트 변환 완료")
@@ -228,7 +229,7 @@ async def process_lecture(
             poppler_path=r"C:\Program Files\Poppler\poppler-24.08.0\Library\bin"
         )
 
-        # 3. 슬라이드별 캡션 추출
+        ### 3. 슬라이드 이미지별 캡션 추출
         slide_captions = []
         for img in images:
             buffered = io.BytesIO()
@@ -249,7 +250,7 @@ async def process_lecture(
 
         # 5. 세그먼트-슬라이드 매핑
         results = mapper.map_lecture_text_to_slides(
-            segment_texts=segments,
+            lecture_text=lecture_text,
             slide_texts=slide_captions
         )
 
@@ -261,7 +262,7 @@ async def process_lecture(
             segment_idx = res["segment_index"]
             slide_idx = res["matched_slide_index"]
             similarity_score = res["similarity_score"]
-            slide_key = f"slide{slide_idx + 1}"  # 슬라이드 번호는 1부터 시작
+            slide_key = f"slide{slide_idx+1}"
 
             if slide_key not in slide_to_segments:
                 slide_to_segments[slide_key] = []
@@ -274,14 +275,11 @@ async def process_lecture(
 
         shutil.rmtree(temp_dir)
 
-        # 7. 슬라이드 번호 기준 오름차순 정렬
-        sorted_slide_to_segments = OrderedDict(
-            sorted(slide_to_segments.items(), key=lambda x: int(x[0].replace("slide", "")))
-        )
+        sorted_slide_to_segments = OrderedDict(sorted(slide_to_segments.items(), key=lambda x: int(x[0].replace("slide", ""))))
 
         return JSONResponse(content=sorted_slide_to_segments)
 
     except Exception as e:
-        if 'temp_dir' in locals() and os.path.exists(temp_dir):
+        if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         return JSONResponse(status_code=500, content={"message": f"처리 실패: {str(e)}"})

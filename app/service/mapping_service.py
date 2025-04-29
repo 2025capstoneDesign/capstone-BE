@@ -1,6 +1,7 @@
 import torch
 from sentence_transformers import SentenceTransformer, util
 from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize
 
 class LectureSlideMapper:
     def __init__(self):
@@ -24,9 +25,12 @@ class LectureSlideMapper:
         # 슬라이드 임베딩 생성
         slide_embeddings = self.model.encode(slide_texts, convert_to_tensor=True)
 
+        # 강의 텍스트를 세그먼트로 분리
+        segments = self.preprocess_and_split_text(lecture_text)
+
         mapping_results = []
 
-        for idx, segment in enumerate(segment_texts):
+        for idx, segment in enumerate(segments):
             segment_embedding = self.model.encode(segment, convert_to_tensor=True)
             cos_similarities = util.cos_sim(segment_embedding, slide_embeddings)
             best_match_idx = torch.argmax(cos_similarities).item()
