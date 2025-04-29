@@ -14,8 +14,6 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str
 
-    CLOVA_API_KEY: str
-
     class Config:
         env_file = ".env"
 

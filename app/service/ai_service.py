@@ -7,7 +7,6 @@ import os, uuid, shutil
 import yt_dlp                     # YouTube 동영상/오디오 다운로드 라이브러리
 import whisper                    # OpenAI Whisper 음성 인식 라이브러리
 import platform
-import requests
 
 import asyncio
 from functools import partial
@@ -143,31 +142,3 @@ async def analyze_image(image_url):
         return result
     except Exception as e:
         return f"오류 발생: {str(e)}"
-
-# Clova 문단 나누기 Api를 활용한 세그먼트 분리 
-def clova_segmentation(text: str) -> list:
-    CLOVA_API_URL = "https://clovastudio.stream.ntruss.com/testapp/v1/api-tools/segmentation"
-    CLOVA_API_KEY = os.getenv('CLOVA_API_KEY')
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {CLOVA_API_KEY}"
-    }
-
-    payload = {
-        "text": text,
-        "alpha": -100,
-        "segCnt": -1,
-        "postProcess": True,
-        "postProcessMaxSize": 500,   #  한 문단의 최대 글자 수
-        "postProcessMinSize": 300    #  한 문단의 최소 글자 수
-    }
-
-    response = requests.post(CLOVA_API_URL, headers=headers, json=payload)
-
-    if response.status_code != 200:
-        raise Exception(f"CLOVA Segmentation API 호출 실패: {response.text}")
-
-    topic_segments = response.json()['result']['topicSeg']
-    segments = [" ".join(segment) for segment in topic_segments]  # 문장 리스트를 하나의 세그먼트로 묶기
-    return segments
