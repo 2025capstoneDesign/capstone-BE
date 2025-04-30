@@ -306,7 +306,7 @@ async def process_lecture(
             slide_caption = slide_captions[slide_idx]
             matched_segment_texts = [seg["text"] for seg in segment_list]
             note_sections, cost = generate_note(slide_caption, matched_segment_texts)
-            note_sections["Matched Segments"] = { 
+            note_sections["Segments"] = { 
                 seg["segment_key"]: {
                     "text": seg["text"],
                     "isImportant": seg["isImportant"],
