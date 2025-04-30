@@ -3,7 +3,7 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.schema.ai_schema import PptExtractResponse, YouTubeURLRequest, AudioTranscibeResponse
-from app.service.ai_service import clova_segmentation, download_youtube_audio, generate_note, get_libreoffice_path, analyze_image, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
+from app.service.ai_service import clova_segmentation, download_youtube_audio, generate_note, get_libreoffice_path, analyze_image, process_important_segments, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
 
 from app.service.mapping_service import LectureSlideMapper
 from app.schema.mapping_schema import LectureTextRequest, MappingResultResponse
@@ -248,7 +248,6 @@ async def process_lecture(
 
         print("Clova API 활용 세그먼트 분리 완료")
 
-
         # 5. 세그먼트-슬라이드 매핑
         results = mapper.map_lecture_text_to_slides(
             segment_texts=segments,
@@ -257,12 +256,17 @@ async def process_lecture(
 
         print("세그먼트 슬라이드 매핑 완료")
 
+        # 중요 세그먼트 추출 
+        raw_json = {f"segment{i}": seg for i, seg in enumerate(segments)}
+        important_segments_result = process_important_segments(raw_json)
+
+        print("매핑 결과 슬라이드 별로 묶기")
+
         # 6. 매핑 결과를 슬라이드별로 묶기
         slide_to_segments = {}
-
-        for slide_idx in range(len(slide_captions)):  # 슬라이드 수만큼 반복
+        for slide_idx in range(len(slide_captions)):
             slide_key = f"slide{slide_idx + 1}"
-            slide_to_segments[slide_key] = []  # 일단 빈 리스트로 초기화
+            slide_to_segments[slide_key] = []
 
         for res in results:
             segment_idx = res["segment_index"]
@@ -270,10 +274,16 @@ async def process_lecture(
             similarity_score = res["similarity_score"]
             slide_key = f"slide{slide_idx+1}"
 
+            seg_id = f"segment{segment_idx}"
+            is_important = seg_id in important_segments_result
+
             slide_to_segments[slide_key].append({
-                "segment_index": segment_idx,
+                "segment_key": seg_id,
                 "text": segments[segment_idx],
-                "similarity_score": round(similarity_score, 4)
+                "isImportant": str(is_important).lower(),
+                "reason": important_segments_result.get(seg_id, {}).get("reason", ""),
+                "linkedConcept": "",
+                "pageNumber": ""
             })
 
         sorted_slide_to_segments = OrderedDict(sorted(slide_to_segments.items(), key=lambda x: int(x[0].replace("slide", ""))))
@@ -281,21 +291,24 @@ async def process_lecture(
         print("각 슬라이드별 필기 생성 시작")
 
         final_notes = {}
-
         for slide_key, segment_list in sorted_slide_to_segments.items():
-            slide_idx = int(slide_key.replace("slide", "")) - 1  # 슬라이드 인덱스 (0부터 시작)
-
+            slide_idx = int(slide_key.replace("slide", "")) - 1
             slide_caption = slide_captions[slide_idx]
             matched_segment_texts = [seg["text"] for seg in segment_list]
-
             note_sections, cost = generate_note(slide_caption, matched_segment_texts)
+            note_sections["Matched Segments"] = { 
+                seg["segment_key"]: {
+                    "text": seg["text"],
+                    "isImportant": seg["isImportant"],
+                    "reason": seg["reason"],
+                    "linkedConcept": seg["linkedConcept"],
+                    "pageNumber": seg["pageNumber"]
+                } for seg in segment_list
+            }
+            final_notes[slide_key] = note_sections  
 
-            final_notes[slide_key] = note_sections
-        
         print("각 슬라이드별 필기 생성 완료")
-        
         shutil.rmtree(temp_dir)
-
         return JSONResponse(content=final_notes)
     
     except Exception as e:

@@ -8,6 +8,7 @@ import yt_dlp                     # YouTube 동영상/오디오 다운로드 라
 import whisper                    # OpenAI Whisper 음성 인식 라이브러리
 import platform
 import requests
+import ast
 
 import re
 from typing import Tuple, Dict, List
@@ -329,3 +330,97 @@ Now, generate the notes accordingly.
     except Exception as e:
         return {"error": f"오류 발생: {str(e)}"}, 0.0
 
+
+
+
+# 중요 세그먼트 찾기 (기준은 사용자가 설정정)
+import ast
+
+def process_important_segments(
+        raw_json: dict,
+        model: str = "gpt-4o",
+        min_size: int = 3000,
+        last_length: int = 1000
+    ) -> dict:
+    segments = [
+        {"id": int(k.replace("segment", "")), "content": v}
+        for k, v in raw_json.items()
+    ]
+    segments.sort(key=lambda x: x["id"])
+
+    merged, current_pack, current_len = [], [], 0
+    for seg in segments:
+        current_pack.append(seg)
+        current_len += len(seg["content"])
+        if current_len >= min_size:
+            merged.append({
+                "content": "\n".join(
+                    [f"{{id : {s['id']} {s['content']}}}" for s in current_pack]
+                )
+            })
+            current_pack, current_len = [], 0
+    if current_pack:
+        if current_len < last_length and merged:
+            merged[-1]["content"] += "\n" + "\n".join(
+                [f"{{id : {s['id']} {s['content']}}}" for s in current_pack]
+            )
+        else:
+            merged.append({
+                "content": "\n".join(
+                    [f"{{id : {s['id']} {s['content']}}}" for s in current_pack]
+                )
+            })
+
+    important = []
+    for block_idx, block in enumerate(merged):
+        rsp = client.chat.completions.create(
+            model=model,
+            temperature=0.7,
+            max_tokens=800,
+            messages=[
+                {"role": "system", "content": """
+Analyze the following lecture content and identify only the truly important parts that the professor emphasized.
+Each segment is enclosed in curly braces {} and starts with 'id : number'.
+
+Criteria for importance (must meet at least one):
+1. Parts explicitly mentioned as being on the exam or test
+2. Parts where a core concept is explained in detail AND highlighted as significant
+3. Parts the professor repeatedly or strongly emphasized as important
+4. Parts prefaced with phrases like "remember this", "this is crucial", or "key point"
+5. Parts where the professor spends significantly more time explaining a single concept compared to others (at least 3x longer than average segment length), particularly if accompanied by multiple examples, analogies, or applications
+
+Be selective - not everything is important. Only include segments with clear evidence of importance.
+If uncertain about a segment's importance, exclude it.
+
+If you find important parts, respond in List of dictionaries: [{id : number, reason : reason for importance}, ..]
+The reason should be concise (max 2-3 sentences) and include specific evidence from the text.
+If no important parts are found, return an empty list []
+"""},
+                {"role": "user", "content": """
+{id : 5 (explains a key concept in detail and professor states "this is particularly important and will be on the exam")}
+{id : 6 (mentioned as being on the exam with "make sure you understand this for the test")}
+{id : 7 (just a brief introduction with no emphasis)}
+"""},
+                {"role": "assistant", "content": """
+[{"id" : 5, "reason" : "Key concept marked as 'particularly important' and confirmed for exam"},
+{"id" : 6, "reason" : "Directly mentioned as test material"}]
+"""},
+                {"role": "user", "content": block["content"]}
+            ]
+        )
+        txt = rsp.choices[0].message.content.strip()
+        print(f"\n🟡 [GPT 응답 block {block_idx}]:\n{txt}\n")  # ✅ GPT 응답 출력
+
+        if txt.startswith("[") and txt.endswith("]"):
+            try:
+                items = ast.literal_eval(txt)
+                important.extend(items)
+            except Exception as e:
+                print(f"❌ 파싱 실패: {e}")  # ✅ 예외 원인 출력
+        else:
+            print(f"❌ GPT 응답이 [ ] 형식이 아님: {txt[:100]}...")  # 짤막히 미리보기 출력
+
+    return {
+        f"segment{item['id']}": {"reason": item["reason"]}
+        for item in important
+    }

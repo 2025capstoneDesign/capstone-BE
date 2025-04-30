@@ -9,7 +9,7 @@ class LectureSlideMapper:
 
     def preprocess_and_split_text(self, text, max_sentences=10):
         """
-        세그먼트 분리 (고정된 개수의 문장으로로)
+        세그먼트 분리 (고정된 개수의 문장으로)
         """
         sentences = sent_tokenize(text.strip())
         merged_sentences = []
@@ -27,6 +27,7 @@ class LectureSlideMapper:
 
         mapping_results = []
 
+        # 슬라이드 임베딩과 세그먼트 임베딩 값의 코싸인 유사도 비교 통한 매핑
         for idx, segment in enumerate(segment_texts):
             segment_embedding = self.model.encode(segment, convert_to_tensor=True)
             cos_similarities = util.cos_sim(segment_embedding, slide_embeddings)
@@ -36,6 +37,7 @@ class LectureSlideMapper:
                 "segment_index": idx,
                 "matched_slide_index": best_match_idx,
                 "similarity_score": round(cos_similarities[0][best_match_idx].item(), 4),
+
             }
             mapping_results.append(result)
 
