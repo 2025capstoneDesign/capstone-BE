@@ -1,10 +1,11 @@
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, Optional
 
 # /youtube-audio 요청 형식 
 class YouTubeURLRequest(BaseModel):
     youtube_url: str
-
+    start_time: Optional[str] = None  # 예: "00:20:03"
+    end_time: Optional[str] = None    # 예: "00:29:40"
 # /extract-ppt-text 응답 형식 
 class PptExtractResponse(BaseModel):
     message: str          

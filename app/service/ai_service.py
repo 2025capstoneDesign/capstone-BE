@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 import os, uuid, shutil
 import yt_dlp                     # YouTube 동영상/오디오 다운로드 라이브러리
+import subprocess
 import whisper                    # OpenAI Whisper 음성 인식 라이브러리
 import platform
 import requests
@@ -20,26 +21,45 @@ from pathlib import Path
 DOWNLOAD_DIR = "download"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-def download_youtube_audio(url: str) -> str:
-    # 저장 오디오 파일명 
-    # audio_file_name = f"{uuid.uuid4().hex}.m4a"
-    audio_file_name = f"{url}_audio.wav"
-    output_path = os.path.join(DOWNLOAD_DIR, audio_file_name)
-    # yt_dlp 옵션 설정: 최고 품질의 오디오만 다운로드 (m4a 형식으로 추출)
+def download_youtube_audio_segment(url: str, start_time: str, duration: str) -> str:
+    """
+    유튜브 URL에서 오디오를 다운로드하고, 특정 구간(start_time부터 duration길이만큼)을 추출하여 저장
+    :param url: 유튜브 영상 URL
+    :param start_time: 시작 시각 (예: "00:20:03")
+    :param duration: 길이 (예: "00:09:37") → 9분 37초
+    :return: 잘라낸 오디오 파일 경로
+    """
+
+    # 1. 전체 오디오 다운로드 (예: kor_audio_full.wav)
+    full_audio_path = os.path.join(DOWNLOAD_DIR, "kor_audio_full.wav")
     ydl_opts = {
-        'outtmpl': output_path,
+        'outtmpl': full_audio_path,
         'format': 'bestaudio/best',
-        # 'postprocessors': [{  # 오디오 추출을 위한 FFmpeg 후처리
-        #     'key': 'FFmpegExtractAudio',
-        #     'preferredcodec': 'm4a'
-        # }]
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         error_code = ydl.download([url])
     if error_code != 0:
-        # yt_dlp 다운로드 실패 (에러 코드가 0이 아니면 오류)
         raise Exception("YouTube 오디오 다운로드 실패")
-    return output_path
+
+    # 2. 원하는 구간만 잘라서 저장
+    clipped_audio_path = os.path.join(DOWNLOAD_DIR, "audio.wav")
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",  # 덮어쓰기
+        "-i", full_audio_path,
+        "-ss", start_time,
+        "-t", duration,
+        "-ar", "16000",  # Whisper 호환
+        "-ac", "1",
+        "-loglevel", "error",
+        clipped_audio_path
+    ]
+    subprocess.run(ffmpeg_cmd, check=True)
+
+    # 원본 오디오 삭제 (선택)
+    os.remove(full_audio_path)
+
+    return clipped_audio_path
 
 def transcribe_audio_file(audio_file: UploadFile) -> str:
 
@@ -146,6 +166,51 @@ async def analyze_image(image_url):
         result = await loop.run_in_executor(
             None,  # 디폴트 쓰레드풀
             partial(_analyze_image_sync, image_url)
+        )
+        return result
+    except Exception as e:
+        return f"오류 발생: {str(e)}"
+    
+###########################################
+def _analyze_image_sync_kor(image_url):
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": """
+Explain slide content following these guidelines:
+1. Present as a professor would during class.
+2. All information presented in the slides must be fully reflected.
+3. Focus on key points, avoid unnecessary details not too long.
+4. Use narrative prose.
+5. Be concise yet informative.
+6. Use Korean.
+"""
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url,
+                            "detail": "low"
+                        }
+                    }
+                ]
+            }
+        ],
+        max_tokens=1000
+    )
+    return response.choices[0].message.content
+
+async def analyze_image_kor(image_url):
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,  # 디폴트 쓰레드풀
+            partial(_analyze_image_sync_kor, image_url)
         )
         return result
     except Exception as e:
