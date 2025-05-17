@@ -1,12 +1,19 @@
 import subprocess
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.schema.ai_schema import PptExtractResponse, YouTubeURLRequest, AudioTranscibeResponse
+from app.model.history import History
 from app.service.ai_service import clova_segmentation, download_youtube_audio_segment, generate_note, get_libreoffice_path, analyze_image, analyze_image_kor, process_important_segments, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
-
 from app.service.mapping_service import LectureSlideMapper, LectureSlideMapperKor
+from app.service.auth_service import get_current_user
+
+from app.schema.ai_schema import PptExtractResponse, YouTubeURLRequest, AudioTranscibeResponse
 from app.schema.mapping_schema import LectureTextRequest, MappingResultResponse
+from app.schema.history_schema import HistoryResponse
+
+from app.model.user import User
+from requests import Session
+from app.database.session import get_db
 
 from collections import OrderedDict
 from pptx import Presentation
@@ -347,13 +354,23 @@ LIBREOFFICE_PATH = get_libreoffice_path()
 async def process_lecture(
     audio_file: UploadFile = File(...),
     doc_file: UploadFile = File(...),
-    skip_transcription: bool = Form(False)  
+    skip_transcription: bool = Form(False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    강의 녹음본 + PPT 파일 입력받아서 슬라이드별 세그먼트 매칭 결과 
+    강의 녹음본 + PPT 파일 입력받아서 슬라이드별 세그먼트 매칭 결과 반환환
     """
 
     try:
+        doc_contents = await doc_file.read()
+
+        ## 강의안 download 폴더에 다운로드
+        download_path = os.path.join(("download"), doc_file.filename)
+        with open(download_path, "wb") as f:
+            f.write(doc_contents)
+
+
         ### 1. 오디오 파일 텍스트 변환 (또는 스킵)
         if skip_transcription:
             with open(os.path.join("download", "lecture_text.txt"), "r", encoding="utf-8") as f:
@@ -368,7 +385,7 @@ async def process_lecture(
         file_path = os.path.join(temp_dir, doc_file.filename)
 
         with open(file_path , "wb") as f:
-            shutil.copyfileobj(doc_file.file, f)
+            f.write(doc_contents)
 
         file_ext = os.path.splitext(doc_file.filename)[-1].lower()
 
@@ -388,6 +405,7 @@ async def process_lecture(
             file_path ,
             poppler_path=r"C:\Program Files\Poppler\poppler-24.08.0\Library\bin"
         )
+        print(f"PDF에서 변환된 슬라이드 이미지 수: {len(images)}")
 
         print("이미지 캡셔닝 시작")
 
@@ -401,6 +419,9 @@ async def process_lecture(
 
             caption = await analyze_image(image_url)
             slide_captions.append(caption)
+
+        print(f"이미지 캡셔닝 결과: {slide_captions}")
+
         
         print("이미지 캡셔닝 완료")
 
@@ -470,8 +491,20 @@ async def process_lecture(
             final_notes[slide_key] = note_sections  
 
         print("각 슬라이드별 필기 생성 완료")
+
+        # 7. 히스토리 DB에 결과 저장
+        new_history = History(
+            user_email=current_user.email,  
+            filename=doc_file.filename,
+            notes_json=final_notes,
+        )
+        db.add(new_history)
+        db.commit()
+        db.refresh(new_history)
+
         shutil.rmtree(temp_dir)
         return JSONResponse(content=final_notes)
+
     
     except Exception as e:
         if 'temp_dir' in locals() and os.path.exists(temp_dir):

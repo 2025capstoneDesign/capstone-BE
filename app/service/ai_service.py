@@ -279,10 +279,10 @@ def parse_note_sections(note_text: str) -> Dict[str, str]:
 
     # 정규표현식 패턴
     patterns = {
-        "Concise Summary Notes": r"1\. Concise Summary Notes",
-        "Bullet Point Notes": r"2\. Bullet Point Notes",
-        "Keyword Notes": r"3\. Keyword Notes",
-        "Chart/Table Summary": r"4\. Chart/Table Summary"
+        "Concise Summary Notes": r"1\. 🧠Concise Summary Notes",
+        "Bullet Point Notes": r"2\. ✅Bullet Point Notes",
+        "Keyword Notes": r"3\. 🔑Keyword Notes",
+        "Chart/Table Summary": r"4\. 📊Chart/Table Summary"
     }
 
     matches = {}
@@ -358,16 +358,20 @@ Important writing guidelines you must follow:
 
 # Output Format Example:
 
-1. Concise Summary Notes
+1. 🧠Concise Summary Notes
 (Your concise summary here)
 
-2. Bullet Point Notes
+2. ✅Bullet Point Notes
 (Your bullet points here)
+∙ This is Bullet Point example
+∙ using This point "∙"
 
-3. Keyword Notes
+3. 🔑Keyword Notes
 (Your keywords here)
+**Continuity** : Maintaining ongoing operations without disruption.  
+**Independence** : Layers functioning without affecting each other.
 
-4. Chart/Table Summary
+4. 📊Chart/Table Summary
 (Your table here or "Omitted")
 
 Now, generate the notes accordingly.
