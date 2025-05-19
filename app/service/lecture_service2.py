@@ -51,7 +51,7 @@ def run_process(
         update_progress(job_id, 35, "PDF 변환 완료")
 
         # PDF → 이미지
-        images = convert_from_path(pdf_path, poppler_path=r"C:\Program Files\Poppler\poppler-24.08.0\Library\bin")
+        images = convert_from_path(pdf_path, poppler_path=os.getenv('POPPLER_PATH'))
         update_progress(job_id, 39, f"총 {len(images)}개의 슬라이드 이미지 추출 완료")
 
         # 이미지 캡셔닝 (40~60%)

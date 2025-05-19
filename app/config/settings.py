@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     # CLOVA
     CLOVA_API_KEY: str
 
+    # Poppler Path
+    POPPLER_PATH: str
 
     class Config:
         env_file = ".env"

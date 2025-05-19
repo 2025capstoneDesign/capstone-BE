@@ -231,7 +231,7 @@ async def image_captioning(file: UploadFile = File(...)):
         # 4. PDF -> 이미지 변환
         images = convert_from_path(
             pdf_path,
-            poppler_path=r"C:\Program Files\Poppler\poppler-24.08.0\Library\bin"
+            poppler_path=os.getenv('POPPLER_PATH')
         )
         if not images:
             raise Exception("PDF를 이미지로 변환하는 데 실패했습니다.")
@@ -311,7 +311,7 @@ async def image_captioning(file: UploadFile = File(...)):
         # 4. PDF -> 이미지 변환
         images = convert_from_path(
             pdf_path,
-            poppler_path=r"C:\Program Files\Poppler\poppler-24.08.0\Library\bin"
+            poppler_path=os.getenv('POPPLER_PATH')
         )
         if not images:
             raise Exception("PDF를 이미지로 변환하는 데 실패했습니다.")
@@ -403,7 +403,7 @@ async def process_lecture(
         
         images = convert_from_path(
             file_path ,
-            poppler_path=r"C:\Program Files\Poppler\poppler-24.08.0\Library\bin"
+            poppler_path=os.getenv('POPPLER_PATH')
         )
         print(f"PDF에서 변환된 슬라이드 이미지 수: {len(images)}")
 
