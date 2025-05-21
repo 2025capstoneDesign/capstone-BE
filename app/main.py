@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, lecture, ai, process_api, history
+from app.api import auth, lecture, ai, process_api, history, ai2, process_api2
 
 # FastAPI 
 app = FastAPI(
@@ -24,6 +24,8 @@ app.include_router(lecture.router, prefix="/api/lecture", tags=["Lecture"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
 app.include_router(process_api.router, prefix="/api/process", tags=["Process"])
 app.include_router(history.router, prefix="/api/history", tags=["History"])
+app.include_router(ai2.router, prefix="/api/ai2", tags=["AI2"])
+app.include_router(process_api2.router, prefix="/api/process2", tags=["Process2"])
 
 @app.get("/")
 def read_root():
