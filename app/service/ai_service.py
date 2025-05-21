@@ -1,7 +1,11 @@
+import tempfile
 from fastapi import Path, UploadFile
 from pptx import Presentation     # python-pptx: PPT 파일 파싱 라이브러리
 from openai import OpenAI
 from dotenv import load_dotenv
+from typing import Tuple, Dict, List
+from functools import partial
+from pathlib import Path
 
 import os, uuid, shutil
 import yt_dlp                     # YouTube 동영상/오디오 다운로드 라이브러리
@@ -10,12 +14,8 @@ import whisper                    # OpenAI Whisper 음성 인식 라이브러리
 import platform
 import requests
 import ast
-
 import re
-from typing import Tuple, Dict, List
 import asyncio
-from functools import partial
-from pathlib import Path
 
 # 다운로드 및 업로드 파일 저장 폴더
 DOWNLOAD_DIR = "download"
@@ -61,29 +61,50 @@ def download_youtube_audio_segment(url: str, start_time: str, duration: str) -> 
 
     return clipped_audio_path
 
-def transcribe_audio_file(audio_file: UploadFile) -> str:
-
-    # 업로드된 파일(강의 녹음본)을 서버의 DOWNLOAD_DIR에 저장
+def transcribe_audio_file(audio_file: UploadFile) -> dict:
+    # 1. 업로드된 오디오 파일 저장
     file_path = os.path.join(DOWNLOAD_DIR, "audio.wav")
-
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(audio_file.file, buffer)
-    
-    # Whisper 모델 로드 및 음성 인식 수행 (small 모델 사용)
-    print("텍스트 변환 진행중")
+
     model = whisper.load_model("small")
-    print(file_path)
+    print("텍스트 변환 진행중")
+
+    # 2. 언어 감지를 위해 앞 30초 오디오 잘라내기 (임시 파일)
+    temp_short_audio_fd, temp_short_audio_path = tempfile.mkstemp(suffix=".wav")
+    os.close(temp_short_audio_fd)
+
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-i", file_path,
+        "-t", "30",
+        "-ar", "16000",
+        "-ac", "1",
+        "-loglevel", "error",
+        temp_short_audio_path
+    ]
+    subprocess.run(ffmpeg_cmd, check=True)
+
+    # 3. Whisper로 언어 감지
+    lang_result = model.transcribe(temp_short_audio_path, task="transcribe")
+    detected_lang = lang_result.get("language")
+
+    os.remove(temp_short_audio_path)  # 앞 30초 임시 오디오 삭제
+
+    # 4. 전체 텍스트 변환
     result = model.transcribe(file_path)
     transcribed_text = result.get("text")
-    print("텍스트 변환 완료")
 
-    # 강의 녹음본에서 추출한 텍스트 DOWNLOAD_DIR에 저장
+    # 5. 텍스트 저장
     lecture_text_path = os.path.join(DOWNLOAD_DIR, "lecture_text.txt")
     with open(lecture_text_path, "w", encoding="utf-8") as f:
         f.write(transcribed_text)
     print("강의 녹음본에서 추출한 텍스트 " + lecture_text_path + "에 저장 완료")
 
-    return transcribed_text
+    return {
+        "language": detected_lang,
+        "text": transcribed_text
+    }
 
 def extract_ppt_text(ppt_file: UploadFile) -> dict:
     if not ppt_file.filename.lower().endswith(".pptx"):

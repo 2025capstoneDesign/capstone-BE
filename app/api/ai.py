@@ -76,13 +76,19 @@ async def youtube_audio(request: YouTubeURLRequest):
 @router.post("/transcribe-audio", response_model=AudioTranscibeResponse)
 async def transcribe_audio(audio_file: UploadFile = File(...)):
     """
-    업로드된 오디오 파일을 Whisper 모델로 음성을 텍스트로 변환
+    업로드된 오디오 파일을 Whisper 모델로 음성을 텍스트로 변환 + 언어 감지 포함
     """
     try:
-        transcribed_text = transcribe_audio_file(audio_file)
-        return {"message": "오디오 텍스트 변환 성공", "data": transcribed_text}
+        result = transcribe_audio_file(audio_file)  # result -> dict: {"text": ..., "language": ...}
+        return {
+            "message": "오디오 텍스트 및 언어 감지 성공",
+            "data": result
+        }
     except Exception as e:
-        return JSONResponse(status_code=500, content={"message": f"음성 인식 실패: {e}", "data": None})
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"음성 인식 실패: {e}", "data": None}
+        )
     
 
 @router.post("/extract-ppt-text", response_model=PptExtractResponse)

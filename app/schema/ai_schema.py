@@ -14,4 +14,4 @@ class PptExtractResponse(BaseModel):
 # /transcribe-audio 응답 형식
 class AudioTranscibeResponse(BaseModel):
     message : str
-    data : str     # 강의 녹음본에서 추출한 텍스트 전체
+    data : dict     # 강의 녹음본에서 추출한 텍스트 전체
