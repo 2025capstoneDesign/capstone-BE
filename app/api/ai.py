@@ -1,10 +1,9 @@
-import subprocess
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.model.history import History
 from app.service.ai_service import clova_segmentation, download_youtube_audio_segment, generate_note, get_libreoffice_path, analyze_image, analyze_image_kor, process_important_segments, transcribe_audio_file, extract_ppt_text  # 서비스 모듈 임포트
-from app.service.mapping_service import LectureSlideMapper, LectureSlideMapperKor
+from app.service.mapping_service import LectureSlideMapper, LectureSlideMapperKor, LectureSlideMapperKorEng, LectureSlideMapperHybrid
 from app.service.auth_service import get_current_user
 
 from app.schema.ai_schema import PptExtractResponse, YouTubeURLRequest, AudioTranscibeResponse
@@ -14,17 +13,19 @@ from app.schema.history_schema import HistoryResponse
 from app.model.user import User
 from requests import Session
 from app.database.session import get_db
-
 from collections import OrderedDict
 from pptx import Presentation
 from pdf2image import convert_from_path
 from fastapi import Form
+
 import tempfile
 import os
 import shutil
 import base64
 import io
 import logging
+import subprocess
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -145,10 +146,11 @@ def map_lecture_to_slide(request: LectureTextRequest):
             "similarity_score": round(similarity_score, 4)  # 소수점 4자리로 깔끔하게
         })
 
-    print("슬라이드별 세그먼트 매칭 완료")
+    # 슬라이드 순으로 정렬
+    sorted_slide_to_segments = OrderedDict(sorted(slide_to_segments.items(), key=lambda x: int(x[0].replace("slide", ""))))
 
-    # 3. 최종 결과 반환
-    return JSONResponse(content=slide_to_segments)
+    print("슬라이드별 세그먼트 매칭 완료")
+    return JSONResponse(content=sorted_slide_to_segments)
 
 #################################
 mapper_kor = LectureSlideMapperKor()
@@ -160,10 +162,10 @@ def map_lecture_to_slide_kor(request: LectureTextRequest):
     """
 
     # 1. 강의 텍스트 세그먼트 분리
-    segments = mapper_kor.preprocess_and_split_text_kor(request.lecture_text, 7)
+    segments = mapper_kor.preprocess_and_split_text(request.lecture_text, 7)
 
     # 2. 각 세그먼트를 가장 유사한 슬라이드에 매핑
-    results = mapper_kor.map_lecture_text_to_slides_kor(
+    results = mapper_kor.map_lecture_text_to_slides(
         segment_texts=segments,
         slide_texts=request.slide_texts
     )
@@ -186,10 +188,12 @@ def map_lecture_to_slide_kor(request: LectureTextRequest):
             "text": segments[segment_idx],
             "similarity_score": round(similarity_score, 4)
         })
+    
+    # 슬라이드 순으로 정렬
+    sorted_slide_to_segments = OrderedDict(sorted(slide_to_segments.items(), key=lambda x: int(x[0].replace("slide", ""))))
 
     print("🇰🇷 슬라이드별 매칭 결과 완료")
-    return JSONResponse(content=slide_to_segments)
-
+    return JSONResponse(content=sorted_slide_to_segments)
 
 
 
@@ -382,7 +386,7 @@ async def process_lecture(
             with open(os.path.join("download", "lecture_text.txt"), "r", encoding="utf-8") as f:
                 lecture_text = f.read()
         else:
-            lecture_text = transcribe_audio_file(audio_file) 
+            lecture_text = transcribe_audio_file(audio_file)["text"]
         
         print("오디오 텍스트 변환 완료")
 
