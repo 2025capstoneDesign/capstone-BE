@@ -1,9 +1,9 @@
 venv/
 
-
 .env
 
 download/
+.download
 
 data/
 .data/

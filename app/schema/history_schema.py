@@ -11,3 +11,8 @@ class HistoryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class HistoryDeleteResponse(BaseModel):
+    message: str
+    filename: str

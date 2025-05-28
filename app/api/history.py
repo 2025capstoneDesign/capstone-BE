@@ -5,7 +5,7 @@ from requests import Session
 from app.database.session import get_db
 from app.model.history import History  
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from app.schema.history_schema import HistoryResponse
+from app.schema.history_schema import HistoryResponse, HistoryDeleteResponse
 from app.service.auth_service import get_current_user
 from app.model.user import User
 
@@ -92,7 +92,7 @@ async def save_to_history(
     return {"message": "히스토리 저장 성공", "history" : new_history}
     
 
-# 히스토리에 있는 파일 다운로드 (백엔드에 있는 다운로드 파일을 클라이언트로 전송) -> http://localhost:8000/api/history/my 결과에서 filename 파싱한 다음에 이 api 쓰면 돼
+# 백엔드에 있는 파일을 클라이언트로 전송 -> http://localhost:8000/api/history/my 결과에서 filename 파싱한 다음에 이 api 쓰면 돼
 @router.get("/download/{filename}")
 def download_file(filename: str):
     base_dir = "download"
@@ -107,3 +107,32 @@ def download_file(filename: str):
         filename=filename,
         media_type="application/pdf" if filename.endswith(".pdf") else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     )
+
+# 히스토리에 있는 파일 삭제 
+@router.delete("/my/{filename}", response_model=HistoryDeleteResponse)
+def delete_my_history_by_filename(
+    filename: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # DB에서 해당 히스토리 조회
+    history = db.query(History).filter(
+        History.user_email == current_user.email,
+        History.filename == filename
+    ).first()
+
+    if not history:
+        raise HTTPException(status_code=404, detail="해당 파일 이름의 히스토리가 존재하지 않습니다.")
+
+    # DB에서 삭제
+    db.delete(history)
+    db.commit()
+    print(f"히스토리 DB에서 삭제 완료: {filename}")
+
+    # 3. 백엔드에 있는 파일도 삭제
+    # file_path = os.path.join("download", filename)
+    # if os.path.exists(file_path):
+    #     os.remove(file_path)
+    #     print(f"파일 시스템에서 삭제 완료: {file_path}")
+
+    return {"message": "히스토리 삭제 성공", "filename": filename}
