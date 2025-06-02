@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, lecture, ai, process_api, history, ai2, process_api2
+from app.api import auth, lecture, ai, process_api, history, ai2, process_api2, real_time_transform
 
 # FastAPI 
 app = FastAPI(
@@ -26,6 +26,7 @@ app.include_router(process_api.router, prefix="/api/process", tags=["Process"])
 app.include_router(history.router, prefix="/api/history", tags=["History"])
 app.include_router(ai2.router, prefix="/api/ai2", tags=["AI2"])
 app.include_router(process_api2.router, prefix="/api/process2", tags=["Process2"])
+app.include_router(real_time_transform.router, prefix="/api/real-time-transform", tags=["RealTimeTransform"])
 
 @app.get("/")
 def read_root():
