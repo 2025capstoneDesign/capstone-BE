@@ -1,13 +1,18 @@
 import os
 import json
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from requests import Session
 from werkzeug.utils import secure_filename
+from app.database.session import get_db
+from app.model.history import History
+from app.model.user import User
 from app.schema.realtime_schema import KeywordSearchRequest, SegmentMatch
+from app.service.auth_service import get_current_user
 from app.service3.realtime_service import find_longest_staying_slide, load_or_create_result_json, save_result_json, transcribe_audio_with_timestamps
 
 router = APIRouter()
@@ -41,8 +46,9 @@ def create_job_directory(job_id: str):
 @router.post("/start-realtime")
 async def start_realtime(doc_file: Optional[UploadFile] = File(None)):
     """
-    실시간 세션 시작 API.
-    PDF 슬라이드 파일(doc_file)을 file 폴더에 저장하며, 내부적으로 job_id를 생성하고 디렉토리 생성.
+    실시간 세션 시작 API
+    PDF 슬라이드 파일(doc_file)을 file 폴더에 저장하며, 내부적으로 job_id를 생성하고 디렉토리 생성
+    job_id를 반환
     """
     try:
         # job_id = 현재 시간 기반 생성
@@ -66,7 +72,7 @@ async def start_realtime(doc_file: Optional[UploadFile] = File(None)):
 async def real_time_process(
     job_id: str,
     audio_file: Optional[UploadFile] = File(None),
-    meta_json: Optional[str] = Form(None)
+    meta_json: Optional[str] = Form(None),
 ):
     """
     실시간 오디오/메타데이터 업로드 API
@@ -110,6 +116,7 @@ async def real_time_process(
                 stt_result = transcribe_audio_with_timestamps(audio_path)
 
                 if stt_result and 'text' in stt_result:
+                    # result.json 불러오기
                     result_data = load_or_create_result_json(job_dir)
 
                     slide_key = f"slide{longest_slide}"
@@ -141,9 +148,11 @@ async def real_time_process(
                         existing_text + " " + new_text if existing_text else new_text
                     )
 
-                    # 저장
+                    # 다시 result.json에 저장
                     save_result_json(job_dir, result_data)
                     return result_data
+                
+
 
         # 오디오 or 메타 없음 → 기존 결과만 반환
         return load_or_create_result_json(job_dir)
@@ -187,3 +196,43 @@ def search_segments_by_keyword(request: KeywordSearchRequest):
                 ))
 
     return {"results": matches}
+
+
+
+@router.post("/end-realtime-process/{job_id}")
+async def end_real_time_process(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    마지막 슬라이드의 넘김 버튼(혹은 '변환')을 눌렀을 때 호출되는 api
+    file/{job_id}/result.json 에 저장된 슬라이드별 누적 STT 및 요약 결과를 History DB에 저장장
+    """
+
+    job_dir = os.path.join(DATA_DIR, job_id)
+
+    # file/{job_id} 에 있는 파일명 추출 
+    uploaded_pdf_filename = None
+    for file in os.listdir(job_dir):
+        if file.lower().endswith(".pdf"):
+            uploaded_pdf_filename = file
+            break
+
+    # file/{job_id}/result.json 속의 내용 result_data 가져오기 
+    result_path = os.path.join(job_dir, "result.json")
+    if not os.path.exists(result_path):
+        raise FileNotFoundError("result.json 파일이 존재하지 않습니다.")
+    
+    with open(result_path, "r", encoding="utf-8") as f:
+        result_data = json.load(f)
+    
+    # 파일명과 result_data 활용해 History DB에 저장장
+    new_history = History(
+        user_email=current_user.email,  
+        filename=uploaded_pdf_filename,
+        notes_json=result_data,
+    )
+    db.add(new_history)
+    db.commit()
+    db.refresh(new_history)
