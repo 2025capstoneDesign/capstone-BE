@@ -11,7 +11,8 @@ from werkzeug.utils import secure_filename
 from app.database.session import get_db
 from app.model.history import History
 from app.model.user import User
-from app.schema.realtime_schema import KeywordSearchRequest, SegmentMatch
+from app.service2.summary import generate_summary
+from app.schema.realtime_schema import KeywordSearchRequest, SegmentMatch, TextMoveRequest
 from app.service.auth_service import get_current_user
 from app.service3.realtime_service import find_longest_staying_slide, load_or_create_result_json, save_result_json, transcribe_audio_with_timestamps
 
@@ -206,8 +207,9 @@ async def end_real_time_process(
     db: Session = Depends(get_db)
 ):
     """
-    마지막 슬라이드의 넘김 버튼(혹은 '변환')을 눌렀을 때 호출되는 api
-    file/{job_id}/result.json 에 저장된 슬라이드별 누적 STT 및 요약 결과를 History DB에 저장장
+    마지막 슬라이드의 넘김 버튼(혹은 '변환 끝')을 눌렀을 때 호출되는 api
+    file/{job_id}/result.json 에 저장된 슬라이드별 누적 STT 및 요약 결과를 History DB에 저장
+    result.json의 결과를 History DB에 저장
     """
 
     job_dir = os.path.join(DATA_DIR, job_id)
@@ -236,3 +238,70 @@ async def end_real_time_process(
     db.add(new_history)
     db.commit()
     db.refresh(new_history)
+
+
+
+@router.post("/move-text-manually/{job_id}")
+async def move_text_manually(job_id: str, request: TextMoveRequest):
+    """
+    문장을 한 슬라이드에서 다른 슬라이드로 이동시킨 후,
+    두 슬라이드 모두에 대해 요약을 다시 생성하는 API.
+    """
+    try:
+        job_dir = os.path.join(DATA_DIR, job_id)
+        result_path = os.path.join(job_dir, "result.json")
+        caption_path = os.path.join(job_dir, "captioning_results.json")
+
+        if not os.path.exists(result_path) or not os.path.exists(caption_path):
+            raise HTTPException(status_code=404, detail="필요한 파일이 없습니다.")
+
+        # 파일 로드
+        result_data = load_or_create_result_json(job_dir)
+        with open(caption_path, "r", encoding="utf-8") as f:
+            captioning_data = json.load(f)
+
+        # 1. from_slide에서 문장 제거
+        from_segments = result_data[request.from_slide]["Segments"]
+        for seg in from_segments.values():
+            if request.sentence in seg["text"]:
+                seg["text"] = seg["text"].replace(request.sentence, "").strip()
+
+        # 2. to_slide에 문장 추가
+        to_segments = result_data[request.to_slide]["Segments"]
+        first_seg = next(iter(to_segments.values()))
+
+        from_num = int(request.from_slide.replace("slide", ""))
+        to_num = int(request.to_slide.replace("slide", ""))
+
+        # 조건에 따라 문장 앞 또는 뒤에 추가
+        if to_num > from_num:
+            first_seg["text"] = request.sentence + " " + first_seg["text"]
+        else:
+            first_seg["text"] += " " + request.sentence
+                
+
+        # 3. 요약 재생성 대상 슬라이드 목록
+        affected_slides = [request.from_slide, request.to_slide]
+
+        for slide_key in affected_slides:
+            slide_number = int(slide_key.replace("slide", ""))
+            slide_data = captioning_data[slide_number - 1]
+            segments = result_data[slide_key]["Segments"]
+            merged_text = "\n".join(seg["text"] for seg in segments.values())
+
+            summary = generate_summary(slide_data, merged_text)
+
+            result_data[slide_key]["Concise Summary Notes"] = f"🧠Concise Summary Notes\n{summary['concise_summary']}"
+            result_data[slide_key]["Bullet Point Notes"] = f"✅Bullet Point Notes\n{summary['bullet_points']}"
+            result_data[slide_key]["Keyword Notes"] = f"🔑Keyword Notes\n{summary['keywords']}"
+            result_data[slide_key]["Chart/Table Summary"] = f"📊Chart/Table Summary\n{summary['chart_summary']}"
+
+        save_result_json(job_dir, result_data)
+
+        return {
+            "message": f"'{request.sentence}' 문장을 {request.from_slide} → {request.to_slide}로 이동하고, 두 슬라이드 요약을 재생성했습니다.",
+            "updated_slides": affected_slides
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
