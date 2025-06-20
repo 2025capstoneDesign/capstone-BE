@@ -22,15 +22,15 @@ def run_websocket_process():
 def main():
     """메인 실행 함수"""
     print("=" * 60)
-    print("🎓 Smart Lecture Note 서버 시작")
+    print(" Smart Lecture Note 서버 시작")
     print("=" * 60)
     
     # 환경 설정 확인
     flask_host = os.getenv('FLASK_HOST', '0.0.0.0')
     flask_port = os.getenv('FLASK_PORT', '8000')
     
-    print(f"📡 Flask API 서버: http://{flask_host}:{flask_port}")
-    print(f"🔗 WebSocket 서버: ws://0.0.0.0:8001")
+    print(f" Flask API 서버: http://{flask_host}:{flask_port}")
+    print(f" WebSocket 서버: ws://0.0.0.0:8001")
     print("=" * 60)
     
     try:
