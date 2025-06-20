@@ -1,9 +1,26 @@
+# 가상환경
+.venv/
 venv/
 
+# 환경변수 파일
 .env
+env
 
-download/
-.download
+# 사용자 업로드 및 테스트 파일
+assets/ 
 
+# 캐시 파일
+__pycache__/
+
+# macOS 시스템 파일
+.DS_Store
+
+# data 파일
 data/
-.data/
+
+file/
+
+# Google Cloud Service Account Credentials
+*credentials*.json
+*service-account*.json
+capstone2025-457105-5ee4bf3f0d1e.json
