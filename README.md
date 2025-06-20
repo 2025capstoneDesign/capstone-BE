@@ -72,7 +72,7 @@ STT_RESULT_PATH=data/stt_result/stt_result.json
 
 ---
 
-## 🔧 4. FFmpeg & Poppler 설치
+## 4. FFmpeg & Poppler 설치
 
 ### Mac (Homebrew 기준)
 
